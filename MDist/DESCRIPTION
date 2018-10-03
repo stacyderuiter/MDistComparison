@@ -7,3 +7,10 @@ Depends: R (>= 3.5.1)
 License: CC BY-NC
 Encoding: UTF-8
 LazyData: true
+Imports:
+    dplyr,
+    graphics,
+    magrittr,
+    stats,
+    utils,
+    zoo

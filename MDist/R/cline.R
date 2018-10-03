@@ -1,6 +1,6 @@
 #' Add colored line segments to a plot
 #'
-#' This function adds colored line segments to an existing plot.  The line is plotted at points specified by inputs x and y, and colored according to factor input z (with one color for each level of z).
+#' This function adds colored line segments to an existing (base-R graphics) plot.  The line is plotted at points specified by inputs x and y, and colored according to factor input z (with one color for each level of z).
 #' @param x x positions of points to be plotted
 #' @param y y positions of points to be plotted
 #' @param z a factor, the same length as x and y. Line segments in the resulting plot will be colored according to the levels of z.
@@ -8,10 +8,11 @@
 #' @keywords visualization, time-series
 #' @export
 #' @examples
-#' cline(x=ChickWeight$Time, y=ChickWeight$weight, 
-#'       z=as.factor(ChickWeight$Diet), 
-#'       color_vector=c('black', 'grey20', 
-#'                      'grey50', 'grey70'))
+#' d <- data.frame(x=c(1:200), y=c(1:200), z=gl(4,50))
+#' plot(x,y)
+#' cline(x,y,z, color_vector=c('black', 'blue', 'red', 'orange'))
+#' #note a ggformula alternative:
+#' gf_path(x~y, color=~z, data=d)
 
 cline <- function(x, y, z, color_vector) {
     # find places where colors will change
