@@ -1,0 +1,9 @@
+Package: MDist
+Title: Mahalanobis-distance-based change point analysis and tag data simulation
+Version: 0.0.0.9000
+Authors@R: person("Stacy", "DeRuiter", email = "sld33@calvin.edu", role = c("aut", "cre"))
+Description: Tools for simulating tag (DTAG) data, extracting parameters for simulation from real tag data, and computing Mahalanobis-distance-based change-point metrics for real or simulated data.
+Depends: R (>= 3.5.1)
+License: CC BY-NC
+Encoding: UTF-8
+LazyData: true
