@@ -9,10 +9,10 @@
 #' @export
 #' @examples
 #' d <- data.frame(x=c(1:200), y=c(1:200), z=gl(4,50))
-#' plot(x,y)
-#' cline(x,y,z, color_vector=c('black', 'blue', 'red', 'orange'))
-#' #note a ggformula alternative:
-#' gf_path(x~y, color=~z, data=d)
+#' plot(d$x,d$y)
+#' cline(d$x,d$y,d$z, color_vector=c('black', 'blue', 'red', 'orange'))
+#' #note a ggformula alternative to using cline at all:
+#' #gf_path(x~y, color=~z, data=d)
 
 cline <- function(x, y, z, color_vector) {
     # find places where colors will change

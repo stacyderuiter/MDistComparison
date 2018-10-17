@@ -13,7 +13,6 @@
 #' @param parallel       logical.  run in parallel?  NOT IMPLEMENTED YET.  would only help if one figured out how to do rollapply in parallel...
 #' @return a data frame with variables t (time in seconds since start of dataset at which distances are reported) and dist (Mahalanobis distances between the specified baseline period and the specified "comparison" periods)
 #' @export
-#' @examples
 
 mdist <- function(data,fs=1, smooth_dur=0, overlap=0, consec=FALSE, cum_sum=FALSE,  
                   baseline_start=0, baseline_end=floor(nrow(data)/fs), 
@@ -33,9 +32,9 @@ ps <- ((k-1)*(W-O) + 1) + smooth_dur*fs*60/2             #mid points of comparis
 t <- ps/fs                          #mid-point times in seconds
 ctr <- colMeans(data[bs:be,], na.rm=T)       #mean values during baseline period
 if (baseline_cov){
-  bcov <- cov(data[bs:be,], use="complete.obs")           #covariance matrix using all data in baseline period
+  bcov <- stats::cov(data[bs:be,], use="complete.obs")           #covariance matrix using all data in baseline period
 }else{
-  bcov <- cov(data, use="complete.obs")
+  bcov <- stats::cov(data, use="complete.obs")
 }
   
 ############################################################
@@ -77,7 +76,7 @@ dist[t > (nrow(data)/fs - smooth_dur*60)] <- NA
 # the cumsum after a specified start time, e.g. from start of exposure...
 # or maybe just better to do later in plotting routines.
 
-if(cumSum==TRUE){
+if(cum_sum==TRUE){
   dist<-cumsum(dist)
   }
 

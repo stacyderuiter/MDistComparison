@@ -10,11 +10,9 @@
 #' @param baseline_start start time of baseline period for threshold determination. Defaults to start of record.
 #' @param baseline_end end time of baseline period for threshold determination. Defaults to the start of the experimental period.
 #' @param md_params a vector or list with information about the settings used for the Mahalanobis distance calculations. Defaults to NULL. This input is just passed unchanged to the result, to facilitate keeping track of experimental period times in simulations.
-#' @return 
+#' @return a list with entries: resp_cst, resp_cst2, resp_dur=diff(resp_cst), resp_dur2=diff(resp_cst2), resp_ind (the indices in data of the detected response), resp_ind_nogap (first and last samples in data of the response),resp_ind2, resp_ind_nogap2, TH_percentile, TH_outlier, exp_times (passed through from input), mdist=data, md_params (passed through from input)
 #' @importFrom magrittr "%>%"
 #' @export
-#' @examples
-#' 
 
 get.chpoint <- function(data,quantile_thr=0.95, thr_type='both', n=10000, 
                         max_gap=600, exp_times, baseline_start=0, 
@@ -35,8 +33,8 @@ get.chpoint <- function(data,quantile_thr=0.95, thr_type='both', n=10000,
   for (k in c(1:n)){
     THpre[k] <- max(pre[S[k]:(S[k]+edur)],na.rm=TRUE)
   }  
-  TH <- quantile(THpre,quantile_thr)
-  TH2 <- 1.5*IQR(THpre) + median(THpre)
+  TH <- stats::quantile(THpre,quantile_thr)
+  TH2 <- 1.5*stats::IQR(THpre) + stats::median(THpre)
   
   if (thr_type %in% c('quantile', 'both')){
     #based on resampled periods from the baseline, determine the change threshold
@@ -48,7 +46,7 @@ get.chpoint <- function(data,quantile_thr=0.95, thr_type='both', n=10000,
       ix <- ix[1:(kk[1]-1)] #take the indices of the first "change" that exceeds the threshold
     }
     #get the start and end time, in seconds since start of record, of the "response"
-    resp_cst <- data$t[c(min(ixs),max(ixs))]
+    resp_cst <- data$t[c(min(ix),max(ix))]
   }else{
     resp_cst<-NULL
     ix<-0}
