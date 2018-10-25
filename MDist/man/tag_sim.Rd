@@ -6,7 +6,7 @@
 \usage{
 tag_sim(n, G, G_exp = G, first = NULL, phase_params, phase_params_exp,
   fine_params, fine_params_exp = fine_params, transform_params = NULL,
-  resp_start = 0, resp_dur = 0)
+  sampling_rate = 1, resp_start = 0, resp_dur = 0)
 }
 \arguments{
 \item{n}{number of dives (or flights, although this is untested) to simulate}
@@ -26,6 +26,8 @@ tag_sim(n, G, G_exp = G, first = NULL, phase_params, phase_params_exp,
 \item{fine_params_exp}{same as fine_params, but during experimental exposure (if any). Defaults to fine_params (i.e., no exposure or no change in within-phase fine-scale data during exposure).}
 
 \item{transform_params}{parameters related to normalizing Box-Cox transformations of dive phase data (if used before estimating MVN parameters for dive phase durations).}
+
+\item{sampling_rate}{sampling rate in Hz (samples per second) for fine-scale time-series data. Defaults to 1 Hz.}
 
 \item{resp_start}{start time (as dive number) of simulated "response" to experimental exposure, if any. Defaults to 0 (no response).}
 

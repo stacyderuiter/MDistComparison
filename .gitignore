@@ -1,0 +1,11 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+**/old
+data/
+figs/
+matlab/
+past_presentations/
+MDistComparison.Rproj
+gmtags.csv
