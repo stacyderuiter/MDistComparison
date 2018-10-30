@@ -4,16 +4,18 @@
 \alias{mc_sim}
 \title{simulate from a Markov chain}
 \usage{
-mc_sim(n, G, G_resp, first)
+mc_sim(sim_dives, n, G, G_exp, first)
 }
 \arguments{
+\item{sim_dives}{data frame with variable "resp" with values "baseline" and "reponse"}
+
 \item{n}{number of time-steps to simulate}
 
 \item{G}{transition probability matrix (baseline)}
 
-\item{first}{l}
-
 \item{G_exp}{transition probability matrix (exposure)}
+
+\item{first}{l}
 }
 \value{
 a vector of numeric values (1 up to number of rows/columns in G) indicating the simulated state sequence

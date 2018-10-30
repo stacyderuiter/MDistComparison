@@ -18,7 +18,7 @@
 #' @importFrom data.table ":="
 #' @export
 
-tag_sim <- function(n, G, G_exp=G, first=NULL, phase_params, phase_params_exp,
+tag_sim <- function(n, G, G_exp=G, first=NULL, phase_params, phase_params_exp = phase_params,
                     fine_params, fine_params_exp=fine_params, 
                     transform_params=NULL, sampling_rate=1,
                     resp_start=0, resp_dur=0){
@@ -44,7 +44,7 @@ tag_sim <- function(n, G, G_exp=G, first=NULL, phase_params, phase_params_exp,
     dplyr::mutate(resp = ifelse(dnum >= resp_start & dnum <= resp_start + resp_dur,
                          'response', 'baseline')) %>%
     #simulate dive types based on G and G_exp
-    dplyr::mutate(dive_type = mc_sim(n, G, G_exp, first))
+    dplyr::mutate(dive_type = mc_sim(sim_dives, n, G, G_exp, first))
 
   # SIMULATE DURATIONS OF PHASES WITHIN EACH DIVE
  
@@ -84,10 +84,13 @@ tag_sim <- function(n, G, G_exp=G, first=NULL, phase_params, phase_params_exp,
 # ---------------------------------------------------- end of "dive metadata" table (sim_dives) creation ---------------------------
   
 # ---------------------------------------------create sim_data (fine-scale time-series data.table) ---------------------------------
-  #set up the time-series data frame
-  sim_data <- data.table(t=seq(from=(1/sampling_rate),by=(1/sampling_rate),
+# Note : Code was modernized up to here but :( no further yet.
+    #set up the time-series data frame
+  sim_data <- data.table::data.table(t=seq(from=(1/sampling_rate),by=(1/sampling_rate),
                                to=60*sum(sim_dives$dur)))
-  setkey(sim_data,t)
+  #organize sim_data by time
+  data.table::setkey(sim_data,t)
+  # create phase end times using phase durations 
   sim_dives$d.end <- 
     round((sim_dives$d.dur +
              cumsum(c(0,head(sim_dives$dur,-1)))) * sampling_rate*60)
@@ -102,107 +105,129 @@ tag_sim <- function(n, G, G_exp=G, first=NULL, phase_params, phase_params_exp,
   get.ind <- function(st, et){
     ix <- c(st:et)
   }
+  # allocate space for phase data
   sim_data$phase <- 
     factor("surface",
            levels=c("bottom", "descent",
                     "ascent", "surface"))
+  # find indices of  descent...
   di <- unlist(mapply(FUN=get.ind, 
                       st=c(1,head(sim_dives$s.end,-1)) ,
                       et=sim_dives$d.end))
+  # bottom
   bi <- unlist(mapply(FUN=get.ind, 
                       st=sim_dives$d.end+1 ,
                       et=sim_dives$b.end))
+  # ascent
   ai <- unlist(mapply(FUN=get.ind, 
                       st=sim_dives$b.end+1 ,
                       et=sim_dives$a.end))
+  # and surface phases
   si <- unlist(mapply(FUN=get.ind, 
                       st=sim_dives$a.end+1 ,
                       et=sim_dives$s.end))
+  # match lengths of labels and dataset (sometimes rounding error hurts)
   di[di > nrow(sim_data)] <- nrow(sim_data)
   bi[bi > nrow(sim_data)] <- nrow(sim_data)
   ai[ai > nrow(sim_data)] <- nrow(sim_data)
   si[si > nrow(sim_data)] <- nrow(sim_data)
+  # add phase labels to phase column of sim_data
   sim_data$phase[di] <- "descent"
   sim_data$phase[bi] <- "bottom"
   sim_data$phase[ai] <- "ascent"
   sim_data$phase[si] <- "surface"
   #END shame. at least the extreme shame.
   
+  # find dive start and end times
   s <- sim_data[phase=="surface",,which=T]
   sim.starts <- c(1,s[diff(sim_data[s,t])> 1]+1)
   sim.ends <- c(tail(sim.starts,-1), nrow(sim_data)+1) - 1
   #add identifier of dive-type (cluster number)
-  sim_data[,clus.num:=
+  sim_data[,dive_type:=
              unlist(mapply(FUN=function(dive.start, dive.end, clus.id)
                rep(clus.id, times=(dive.end-dive.start+1)), sim.starts, sim.ends, 
-               sim_dives$clus.num))]
+               sim_dives$dive_type))]
   #add dive number (in sequence - first, second, 3rd dive etc) 
-  sim_data[,dive.num:=
+  sim_data[,dive_num:=
              unlist(mapply(FUN=function(dive.start, dive.end, dive.id)
                rep(dive.id, times=(dive.end-dive.start+1)), sim.starts, sim.ends, 
                c(1:nrow(sim_dives))))]
   #fill in the simulated DTAG data within dive phases.
   #find the places where dive phase changes
   #this gives indices of the last entry within phases:
-  setkey(sim_data,t)
+  data.table::setkey(sim_data,t)
+  # indices of phase ends
   pe <- c(which(diff(unclass(sim_data$phase)) != 0), nrow(sim_data))
   #start indices of phases
   ps <- c(1, head(pe, -1) + 1) 
   #indicator of whether each time point is "response" or not
-  sim_data[,resp.ind:=sim_dives[sim_data$dive.num,"resp.ind"]]
+  sim_data[,resp:=sim_dives[sim_data$dive_num,"resp"]]
   
-  #not needed for data.table:
-  #sim_data[, keep2] <- vector("numeric", nrow(sim_data))
-  #keep2 (phases to simulate):
-  # list(depth, Ax, Ay, Az,cpitch, spitch, croll,sroll, shead, chead,nmsa, nodba, verticalvelocity, tip)
+  # loop over all dive phases in simulated dataset
   for (p in 1:length(ps)) {
+    # indices of this phase
     pix <- seq(from = ps[p], to = pe[p])
+    # duration of the phase in samples
     np <- length(pix)
-    dt <- sim_data[pix[1],clus.num]
+    # which dive type this dive is
+    dt <- sim_data[pix[1],dive_type]
     # ph <- unclass(sim_data$phase[pix[1]])
-    if (sim_data[pix[1], resp.ind]=="baseline"){
-      mod <- inPhase[[dt]][[sim_data[pix[1],phase]]]
+    
+    if (sim_data[pix[1], resp]=="baseline"){
+      # simulation params for this phase, this dive type, baseline
+      mod <- phase_params[[dt]][[sim_data[pix[1],phase]]]
     }else{
-      mod <- inPhase.resp[[dt]][[sim_data[pix[1],phase]]]
+      # simulation params for this phase, this dive type, response
+      mod <- phase_params_exp[[dt]][[sim_data[pix[1],phase]]]
     }
+    
+    # try to simulate data
     fillin <- try(mAr.sim(w = mod$wHat, A = mod$AHat,
                                C = mod$CHat, N = np),
                        silent=TRUE)
+    # if there was an error then fill in missing data
    if(class(fillin)=="try-error"){
       fillin <- NA
         #try(mAr.sim(w = mod$wHat, A = mod$AHat,
                 #            C = mod$CHat, N = np),
                 #    silent=TRUE)
-    }
+   }
+    # put the data into the sim_data data table
     sim_data[pix, (keep2):=fillin]
+    # remove the phase data so it doesn't gum up the next iteration
    rm(fillin)
   }
   
-  #verify odba, msa are +ve
+  #verify odba, msa are +ve.
+  # this is no good, no good at all. I seriously wonder if it would be better to just generate these from simulated Acc data
+  # need to try this when I have time...
   sim_data[,nodba:=abs(nodba)]
   sim_data[,nmsa:=abs(nmsa)]
   
   ## if heading is modelled as sin(heading) & cos(heading)
   #sim_data[,heading:=sincos2angle(sim_data$shead,sim_data$chead)] 
-  ##if heading is modelled as diff(heading)
+  ##if heading is modelled as diff(heading) (this seems to work better?)
   head0 <- runif(1, min = -pi, max = pi) + cumsum(sim_data$dhead)
+  # this switching back and forth is to get the headings into the 0-2pi range
   sim_data[,shead:=sin(head0)]
   sim_data[,chead:=cos(head0)]
-  sim_data[,heading:=sincos2angle(sin.data = shead, cos.data = chead)]
+  sim_data[,heading:=sincos2angle(sin = shead, cos = chead)]
   
+  # fill in pitch and roll from simulated sin(pitch) cos(pitch) sin(roll) cos(roll)
   sim_data[,pitch:=sincos2angle(sim_data$spitch, sim_data$cpitch)]
   sim_data[,roll:=sincos2angle(sim_data$sroll, sim_data$croll)]
   # also generate a depth profile based on: 1. z=0 at start of
   # each descent phase 2. then use vertical velocity Note: this
   # will never work quite right because the whale won't end up
   # back at the surface at the end of the dive.
-  setkey(sim_data,t)
+  data.table::setkey(sim_data,t)
   ds <- intersect(ps, sim_data[phase == "descent",,which=T])
   sim_data[,vd:=verticalvelocity * (1/sampling_rate)]
   # get 'dead reckoned' depth track
   vd2z <- function(dive.start, dive.end, vd) {
     cumsum(vd[c(dive.start:dive.end)]) - vd[dive.start]
   }
+  # put initial simulated depth into the data table
   sim_data[,z0:=unlist(mapply(FUN = vd2z, dive.start = sim.starts,
                               dive.end = sim.ends, MoreArgs = list(vd = sim_data$vd)))]
   # adjust ascent vv so the whale ends at the surface.
@@ -216,11 +241,13 @@ tag_sim <- function(n, G, G_exp=G, first=NULL, phase_params, phase_params_exp,
     vd.new <- zb/za * vd[c(as:ae)]
     return(vd.new)
   }
+  # put adjusted vertical velocity into the data table
   sim_data[,vd.adj:=vd]
   sim_data[phase == "ascent" ,vd.adj:=unlist(mapply(FUN = adj.asc.vd,
                                                     as = as, ae = ss - 1, MoreArgs = list(vd = sim_data$vd, z0 = sim_data$z0)))]
   sim_data[,z:=unlist(mapply(FUN = vd2z, dive.start = sim.starts,
                              dive.end = sim.ends, MoreArgs = list(vd = sim_data$vd.adj)))]
+  # don't let the whales fly even after all this adjustment they try to.
   sim_data[,z:=ifelse(z < -5, 0, z)]
   return(sim_data)
   

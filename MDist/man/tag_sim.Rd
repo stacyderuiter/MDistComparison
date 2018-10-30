@@ -4,8 +4,9 @@
 \alias{tag_sim}
 \title{Simulate data from an animal-borne tag}
 \usage{
-tag_sim(n, G, G_exp = G, first = NULL, phase_params, phase_params_exp,
-  fine_params, fine_params_exp = fine_params, transform_params = NULL,
+tag_sim(n, G, G_exp = G, first = NULL, phase_params,
+  phase_params_exp = phase_params, fine_params,
+  fine_params_exp = fine_params, transform_params = NULL,
   sampling_rate = 1, resp_start = 0, resp_dur = 0)
 }
 \arguments{

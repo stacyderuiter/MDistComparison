@@ -1,5 +1,6 @@
 #' simulate from a Markov chain
 #'
+#' @param sim_dives data frame with variable "resp" with values "baseline" and "reponse"
 #' @param n number of time-steps to simulate
 #' @param G transition probability matrix (baseline)
 #' @param G_exp transition probability matrix (exposure)
@@ -9,7 +10,7 @@
 
 
 
-mc_sim <- function(n,G,G_resp,first) {
+mc_sim <- function(sim_dives, n,G,G_exp,first) {
   sim <- numeric(n)
   m <- ncol(G)
 sim[1] <- first
