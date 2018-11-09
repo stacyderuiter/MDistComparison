@@ -1,0 +1,1080 @@
+\documentclass[12pt]{article}
+\usepackage{amsmath}
+\usepackage{epsfig}
+\usepackage{epsf}
+\usepackage{graphics}
+\usepackage{graphicx}
+\usepackage{rotating}
+%\usepackage{C:\Program Files\R\R-2.15.0\share\texmf\tex\latex\Sweave}
+\usepackage{natbib}
+\usepackage[T1]{fontenc}
+\usepackage{enumitem}
+
+\begin{document}
+
+
+
+<<include=FALSE>>=
+  opts_chunk$set(fig.path='figs/mdist_sim')
+@
+
+
+\begin{center}
+{\Large Simulating DTAG data to facilitate simulation-based study of 
+Mahalanobis distance analysis methods}
+
+\bigskip
+
+{\normalsize MOCHA WORKING DOCUMENT WDxx}
+
+\bigskip
+
+{\large Stacy DeRuiter, with MOCHA team}
+\bigskip
+
+\noindent \small Centre for Research into Ecological and
+Environmental Modelling\\ The Observatory, University of St Andrews,
+St Andrews, KY16 9LZ, Scotland
+\end{center}
+
+Version Dated:~\today
+
+\bigskip
+%\rule{\linewidth}{1mm}
+\rule[0cm]{12.7cm}{0.1cm} \vspace{-0.5cm} \tableofcontents
+%\rule{\linewidth}{0.5mm}
+%\rule[raise-height]{width}{height}
+\rule[0cm]{12.7cm}{0.05cm} \vspace{-0.5cm}
+\begin{center}
+\rule[0cm]{7cm}{0.05cm}
+\end{center}
+
+\bigskip
+
+<<echo=FALSE>>=
+  #To produce the .tex file use
+  #knit("mdist_sim.Rnw")
+  #To produce a file with just the R commands use
+  #purl("mdist_sim.Rnw")
+  #save.image("mdist_sim.Rnw")
+  @
+
+\section{Introduction}
+The goal of this work is to simulate DTAG data time-series for use in a 
+simulation-based assessment of the perfomance of change-point analysis 
+methods based on Mahalanobis distance.  A number of data streams measured by 
+the DTAG, or derived from DTAG data, will be simulated (see Table 
+\ref{table:vars} for a list).  The process will probably be somewhat 
+iterative -- simulated data will be examined to see if it is more effective 
+to simulate tag-measured variables (e.g. depth, 3-axis acceleration, 3-axis 
+magnetometer) and then calculate derived variables, or if directly simulating 
+derived variables produces more realistic results.
+
+\begin{tabular}{|p{2.5in}|p{3in}|}
+\hline
+Variable & Comments \\
+\hline
+Vertical Speed ($\frac{m}{sec}$) &\\ %from tag data
+Depth (m) & difficult to model directly; to be recovered from change in depth 
+per unit time\\
+Acceleration ($\frac{m}{s^2}$) & tri-axial (x, y, z; in whale frame of 
+reference)\\
+Magnetometer (degrees) & tri-axial (x, y, z; in whale frame of reference)\\
+Variability of Heading & \\
+pitch (degrees) & \\
+roll (degrees) & \\
+MSA ($\frac{m}{s^2}$) & Minimum Specific Acceleration\\
+ODBA ($\frac{m}{s^2}$) & Overall Dynamic Body Acceleration\\
+acoustic events & possibly to be added later on? (this will be a challenge); 
+e.g. calls, clicks, foraging buzzes\\
+\hline
+\end{tabular}
+\label{table:vars}
+
+
+\section{Plan of Attack}
+Past attempts have shown that fitting simple models (e.g. multivariate normal 
+models, autoregressive models, and combinations of the two) to DTAG data, and 
+then simulating from the models, produces highly unrealistic simulated 
+datasets.  Fitting realistically-complex hidden-state models to DTAG data 
+presents methodological challenges and is an ongoing MOCHA project in itself, 
+so in the short term, state-space models do not seem likely to provide a 
+basis for simulating data.  (Fitting the state-space models to data is 
+generally a challenge, and it is difficult to acheive convergence for models 
+that capture biologically important features of the data on short 
+time-scales.) To try to capture a reasonable amount of the complexity of the 
+whales' behaviour and acheive reasonable simulated datasets, the plan is as 
+follows.  (The process below is to be applied to all available baseline data 
+on a species-by-species basis, in order to generate fitted model parameters 
+and uncertainty estimates for each species.)
+
+\begin{enumerate}
+\item{\textbf{Dive Detection}} Automatically detect all dives in the 
+    dataset that exceed a user-specified depth (probably initially 10 m; 
+    possibly less (5 m?) for small odontocetes that do long bouts of very 
+    shallow dives), and calculate dive duration, maximum depth, and 
+    post-dive surface interval for each dive.
+\item{\textbf{Dive Type Clustering}} Cluster the dives into dive types 
+    based upon dive depth and duration (and possibly surface interval 
+    duration).  Initially, the plan is to use k-means clustering algorithm, 
+    with silhouette analysis to determine the appropriate number of 
+    clusters.
+\item{\textbf{Dive Type Sequence Model}} Fit a Markov-chain model to 
+    estimate transition probabilities from dive-type to dive-type (assuming 
+    there is more than one type of dive after the cluster analysis).
+\item{\textbf{Dive Phase Segmentation}}  Separate each dive into phases, 
+    and measure the duration of each dive phase:
+  \begin{enumerate}
+  \item{\textbf{descent}} From the start of the dive until the first time 
+      the whale attains 85\% of the maximum dive depth
+  \item{\textbf{ascent}} From the last time the whale exceeds 85\% of the 
+      maximum dive depth until surfacing
+  \item{\textbf{bottom}} From the end of the descent until the start of 
+      the ascent
+  \item{\textbf{post-dive surface interval}} From surfacing until the 
+      start of the next dive
+  \end{enumerate}
+\item{\textbf{Phase-specific model fitting}} For each phase, (and 
+    separately for each dive type), fit a multivariate normal model 
+    including ARn temporal autocorrelation for all of the variables to be 
+    simulated.  (The mAr package in R seems promising).
+\end{enumerate}
+
+Once the model fitting described above has been completed, simulation of data 
+can proceed as follows:
+\begin{enumerate}
+\item Use the Markov transition matrix to simulate a sequence of dive 
+    types.
+\item Transform the dive-type-specific phase durations, if needed, so that 
+    a multivariate Normal (MVN) model is appropriate, and fit the model to 
+    the data.  Simulate dive phase durations for each dive using the MVN 
+    parameters.
+\item For each phase of each dive, simulate DTAG (or DTAG-derived) 
+    measurements using the MVN/ARn phase-specific model.
+\end{enumerate}
+
+The success of this approach will be assessed, at least initially, by 
+plotting the simulated data and asking experts to determine whether or not it 
+"looks like" tag data from the species in question.
+???
+If the baseline simulation procedure produces acceptable results, it will 
+then be easy to add effects of exposure by simply introducting dependence of 
+model parameters (dive-type transition probabilities, dive-phase durations, 
+or mean/variance/covariance of within-phase measurements) on "exposures".
+
+\section{First test case:  Ziphius data}
+We will first try to apply the method outlined above to data from Cuvier's 
+beaked whale, \textit{Ziphius cavirostris}.
+
+Note: need to be careful about input data.  This was working beautifully with 
+a smaller input data set and now seems to be broken???  Get old input data 
+set back using old arsim scripts to recover data indices?
+
+<<zc_data_in, size="scriptsize", include=T,echo=F,eval=T, tidy=T,tidy.opts=list(keep.blank.line=FALSE, width.cutoff=60)>>=
+require(formatR)
+require(data.table)
+# A few constants, limits
+#########################
+#bottom phase is defined as : from the first to the last time depth exceeds this proportion of the max depth.
+bott.prop <- 0.85
+#note: was 0.85 after Hooker paper, but bottom phases were showing too many excursions.  Changing to 0.9 did not help.  instead, trying to add "dz in phase" variable
+#a dive must have a max depth at least z.min to be detected as a dive:
+z.min <- 25 
+#########################
+#read in a baseline data file or two...
+#load in data for whales as matrices
+filenames <- list.files(path="./data/", 
+pattern="[zc][[:digit:]]{2}[_][[:digit:]]{3}[[:alpha:]]{1}[.txt]")
+whales <- sub(".txt", "", filenames)
+data.list <- list()
+for (w in 1:length(whales)){
+  #read in data
+  #data frame version
+  #d0 <- read.table(file=paste("./data/", filenames[w], sep=""), 
+   #                  header=T, sep="\t") 
+  #data table version
+  d0 <- fread(input=paste("./data/", filenames[w], sep=""))
+  #because fread INSISTS on making all the data cols chr
+  #(even if colClasses is set to "numeric")
+  d0 <- d0[, lapply(.SD[, , with=FALSE], as.numeric)] 
+  #because fread inserts (keeps) lots of spaces in the col names
+  setnames(d0, names(d0), gsub(" ", "", names(d0)))
+  #for each one, detect dives
+  source("finddives.R")
+  source("fir_nodelay.R")
+  dives0 <- finddives(p=d0$depth,1/mean(diff(d0$cst)),th=z.min, 
+  surface=2,findall=F)
+  #trim data to cut off any incomplete dives
+  #this includes cutting off the last complete 
+  #dive so that every dive has a 
+  #post-dive surface interval attached.
+  d0 <- d0[d0$cst >= dives0$start.cue[1], ]
+  d0 <- d0[d0$cst < tail(dives0$start.cue,1), ]
+  # data frame way d0$ID <- whales[w]
+  d0[,ID:=whales[w]]
+  data.list[[w]] <- d0 
+}
+#put all the whales into one data frame.
+#data = Reduce(function(...) merge(..., all=T), data.list)
+#data.table version
+data <- rbindlist(data.list)
+data <- data[, ID:=as.factor(ID)]
+#keep just depth, A, pitch, roll, head 
+#as the data to which to fit the model
+#note currently we keep them all...
+keep <- c("cst", "depth", "Ax","Ay", "Az",
+          "pitch", "roll", "heading",
+          "msa", "odba", "vertical.velocity")
+#(the only one we are not keeping is jerk)
+
+fs.ind <- tapply(X=data$cst, INDEX=data$ID, FUN= function(t) 1/(mean(diff(t), 
+na.rm=T)))
+fs.ind <- data[,1/mean(diff(cst)),by=ID][,2,with=F]
+if (sum(diff(unlist(fs.ind))) != 0) warning('input data sets have different sampling rates')
+fs <- unlist(fs.ind[1])
+#cumulative time index (over all whales)
+#data$t <- seq(from=0, to=(nrow(data)-1)/fs, by = 1/fs)
+data[,t:=seq(from=0, to=(nrow(data)-1)/fs, by = 1/fs)]
+#cos and sin of circular data
+data[,':=' (chead=cos(heading), shead=sin(heading),
+            cpitch=cos(pitch), spitch=sin(pitch),
+            croll=cos(roll), sroll=sin(roll))]
+data[,dhead:=c(0,diff(heading)),by=ID]
+# #data.frame way
+# data$chead <- cos(data$heading)
+# data$shead <- sin(data$heading)
+# data$dhead <- c(0,diff(data$heading)) #warning: does not care about transitions from whale to whale!
+# 
+# data$cpitch <- cos(data$pitch)
+# data$spitch <- sin(data$pitch)
+# 
+# data$croll <- cos(data$roll)
+# data$sroll <- sin(data$roll)
+
+#scaled versions of ODBA and MSA 
+#(scale by individual-whale median value
+#to account for tag placement differences)
+data[,nodba:=odba/median(odba),by=ID]
+data[,nmsa:=msa/median(msa),by=ID]
+
+# #data.frame way:
+# modba <- tapply(data$odba, data$ID, median)
+# data$nodba2 <- data$odba/modba[data$ID]
+# mmsa <- tapply(data$msa, data$ID, median)
+# data$nmsa <- data$msa/mmsa[data$ID]
+
+@
+
+\section{Dive Detection} Automatically detect all dives in the dataset that 
+exceed a user-specified depth (probably initially 10 m; possibly less (5 m?) 
+for small odontocetes that do long bouts of very shallow dives), and 
+calculate dive duration, maximum depth, and post-dive surface interval for 
+each dive.  Plot the results to check accuracy (Figure 
+\ref{fig:detect_dives}).
+
+<<detect_dives, size="scriptsize", dev="png", fig.env="figure",fig.pos="htb", fig.width=5.5, fig.height=5, include=T,echo=F,eval=T, fig.cap="Dive profile (all data) with detected dive starts/ends.">>=
+source("finddives.R")
+source("fir_nodelay.R")
+setkey(data,t)
+dives <- finddives(p=unlist(data$depth),fs=fs,th=z.min, surface=2,findall=T)
+dives$ID <- as.factor(data$ID[round(data$t,2) %in% round(dives$start.cue,2)])
+#make a plot here of dive profile + detected dive starts/ends
+par(mfrow=c(1,1))
+plot(data[,t/60] , data[,depth], ylim=c(1500,5), type="l",
+     xlab="Time (h)", ylab="Depth (m)", cex.axis=1.5, 
+     cex.lab=1.5, main="All Whales")
+points(dives$start.cue/60 , data$depth[round(fs*dives$start.cue)], pch=19, 
+col="green")
+points(dives$end.cue/60 , data$depth[round(fs*dives$end.cue)], pch=17, 
+col="red")
+legend("bottomright", legend=c("Dive profile", "Start of Dive", "End of 
+Dive"),
+       col=c("black", "green", "red"), pch=c(NA,19,17), lwd=c(2,NA,NA), 
+       bty="n")
+
+#same plot, but one for each whale
+par(mfrow=c(1,1))
+setkey(data,t)
+for (w in 1:nlevels(as.factor(data[,ID]))){
+  idata <- data[ID==whales[w],]
+plot(idata$t/60 , idata$depth, ylim=c(1500,5), type="l",
+     xlab="Time (h)", ylab="Depth (m)", cex.axis=1.5, 
+     cex.lab=1.5, main=whales[w])
+dw <- dives[dives$ID==whales[w],]
+points(dw$start.cue/60 , rep(0,nrow(dw)), pch=19, 
+col="green")
+points(dw$end.cue/60 , rep(0,nrow(dw)), pch=17, 
+col="red")
+legend("bottomright", legend=c("Dive profile", "Start of Dive", "End of 
+Dive"),
+       col=c("black", "green", "red"), pch=c(NA,19,17), lwd=c(2,NA,NA), 
+       bty="n")
+}
+setkey(data,t)
+@
+
+
+\section{Dive Type Clustering} Cluster the dives into dive types based upon 
+dive depth and duration (and possibly surface interval duration).  Initially, 
+the plan is to use a k-means clustering algorithm, with silhouette analysis 
+to determine the appropriate number of clusters.
+
+<<silhouette, size="scriptsize", dev="png", fig.env="figure", fig.pos="htb", fig.width=5.5, fig.height=5, echo=T,eval=T, fig.cap="Result of silhouette analysis to determine the number of dive clusters.">>=
+require(MASS)
+require(calibrate)
+#require(boot) ?? are we using this?
+require(cluster)
+
+clus.data <- data.frame(depth=dives$max.depth, duration=(dives$end.cue-dives$start.cue) )
+clus.data.scale <- scale(clus.data, scale=TRUE, center=TRUE)
+
+#silhouette analysis
+maxnc <- 20 #max number of clusters to try
+number <- numeric(maxnc)
+par(mfrow=c(1,1), mar=c(5,5,4,2))
+for (k in 2:maxnc)
+  number[k] <- clara(na.omit(clus.data.scale), k) $ silinfo $ avg.width
+plot(number,xlab= "Number of Clusters",ylab = "Average Silhouette Width", 
+cex.lab=1.6, cex.axis=1.5, type="p", pch=19)
+k.best <- which.max(number)
+axis(1, k.best, paste(k.best,"(best)",sep="\n"), col = "red", col.axis = 
+"red", padj=1, cex.axis=1.5)
+
+@
+
+
+<<clustering, size="scriptsize", dev="png", fig.env="figure", fig.pos="htb", fig.width=5.5, fig.height=5,echo=T,eval=T, fig.cap="Clustering results, with dives grouped together according to maximum depth and dive duration.">>=
+clus <- clara(na.omit(clus.data.scale),k.best)
+
+#clusplot(clus, main="" , xlab="Component 1" , ylab="Component 2" , sub="")
+dives$clus.num <- numeric(nrow(dives)) #preallocate space
+dives$clus.num[!is.na(dives$max.depth)] <- clus$clustering
+cbPalette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", 
+"#0072B2", "#D55E00", "#CC79A7")
+colrs <- cbPalette[1:k.best]
+pchs <- 14+c(1:k.best)
+par(mfrow=c(1,1), mar=c(5,5,4,2))
+for (k in 1:k.best){
+  if (k==1) {
+    plot(x=clus.data$duration[dives$clus.num==k]/60, 
+         y=clus.data$depth[dives$clus.num==k], 
+         ylab="Depth (m)", xlab="Duration (minutes)", 
+         type="p", main="",
+         pch=pchs[k], col=colrs[k], 
+         xlim=c(0,max(clus.data$duration/60,na.rm=T)),
+         ylim=c(0,max(clus.data$depth,na.rm=T)),
+         cex.axis=1.3, cex.lab=1.3)
+  }
+  if (k>1){
+    points(x=clus.data$duration[dives$clus.num==k]/60, 
+           y=clus.data$depth[dives$clus.num==k],
+           col=colrs[k], pch=pchs[k]) 
+  }
+}
+legend(x="bottomright", legend=paste("cluster", c(1:k.best), sep=" "),
+       col=colrs[1:k.best], pch=pchs[1:k.best], cex=0.7, bty= "n" )
+
+@
+
+\section{Dive Type Sequence Model} Fit a Markov-chain model to estimate 
+transition probabilities from dive-type to dive-type (assuming there is more 
+than one type of dive after the cluster analysis).
+
+<<MC, include=T,echo=T,size="scriptsize", eval=T, tidy=T, tidy.opts=list(keep.blank.line=FALSE, width.cutoff=60)>>=
+#function to estimate of transition matrix values
+# (Max likelihood estimates of the model parameters!)
+#(they have a closed form hurrah!)
+findG <- function(states, skips, IDs, counts){
+  if(missing(counts)){
+    counts <- 0 
+    #counts is a logical stating whether to return answer as 
+    #counts instead of as probabilities
+  }
+  #find vector of transition matrix entries given a sequence of states and an 
+  #indicator variable that is 1 on entries to be skipped.
+  IDs <- as.factor(IDs)
+  ni <- levels(IDs)
+  ns <- length(unique(states))
+  G0 <- matrix(nrow=length(ni),ncol=ns^2)
+  for (w in 1:length(ni)){
+    s <-as.factor(states[IDs==ni[w]])
+    ski <- skips[IDs==ni[w]]
+    n <- length(s)
+    froms <- s[-n]
+    tos <- s[-1]
+    ft <- data.frame(froms=froms, tos=tos)
+    ts <- interaction(froms[ski==0],tos[ski==0],lex.order=T,drop=F)
+    nf <- table(ft$froms[ski==0])
+    ie <- c(1:ns^2) 
+    #index to entries in ts that need estimation (not defined 
+    #to be 1 or 0).
+    nfi <- gl(ns,ns) 
+    # index to entries in nf that are the "from" states for ie
+    ifelse(counts,
+           G0[w,] <- as.vector(table(ts)[ie]) ,
+           G0[w,] <- as.vector(table(ts)[ie]/nf[nfi]) )
+           
+  }
+  G <- matrix(G0,nrow=ns,ncol=ns,byrow=T) 
+  return(G)
+}
+dives$ID <- data$ID[round(data$t,2) %in% round(dives$start.cue,2)]
+sk <- c(dives$ID[-nrow(dives)] != dives$ID[-1], 0)
+G <- findG(states=dives$clus.num, skips=sk,
+           IDs=rep(1,nrow(dives)), counts=F)
+@
+
+\section{Dive Phase Segmentation}  Separate each dive into phases, and 
+measure the duration of each dive phase (descent, bottom, ascent, and 
+surface).
+<<dive_phases, size="scriptsize", dev="png", fig.env="figure", fig.pos="htb", fig.width=5.5, fig.height=5, echo=T,eval=T, fig.cap="Dive profile with dive phases">>=
+# some helper functions for caclulating dive
+# variables
+
+phase.dur <- function(i1, i2, full.depth.profile, sfs, phase, type){
+  #phase is the dive phase: either descent, bottom, ascent
+  #type is dur (for durations) and ix (for indices in full dive profile)
+  #input checking for partial "phase" inputs...
+  if (grepl("d", phase[1], ignore.case=T)) phase <- "descent"
+  if (grepl("b", phase[1], ignore.case=T)) phase <- "bottom"
+  if (grepl("a", phase[1], ignore.case=T)) phase <- "ascent"
+  #if grepl("s", phase[1], ignore.case=T) phase <- "surface"
+  #get depth profile for this dive
+  z <- full.depth.profile[i1:i2]
+  ed <- which(z > bott.prop * max(z))
+  dur <- switch(phase,
+         descent = head(ed,1) * (1/sfs) * (1/60), 
+         bottom=(tail(ed,1) - head(ed,1)) * (1/sfs) * (1/60), 
+         ascent= (length(z) - tail(ed,1)) * (1/sfs) * (1/60)) 
+  ix <- switch(phase,
+         descent = c(1:head(ed,1)) + i1-1 ,
+         bottom= c((head(ed,1)+1):(tail(ed,1)-1)) + i1-1, 
+         ascent= c(tail(ed,1) : length(z)) + i1-1 ) 
+  if (type=="dur") return(dur)
+  if (type=="ix") return(ix)  
+}
+
+data[,phase:=factor("surface", levels=c("bottom", "descent", "ascent", 
+"surface"))]
+# data$phase <- factor("surface", levels=c("bottom", "descent", "ascent", 
+# "surface"))
+dives$sind <- floor(dives$start.cue * fs )
+dives$eind <- ceiling(dives$end.cue * fs )
+dives$eind[dives$eind>nrow(data)] <- nrow(data)
+dives$sind[dives$sind<1] <- 1
+dives$b.dur <- mapply(FUN = phase.dur, i1 = dives$sind, 
+                      i2 = dives$eind, MoreArgs = 
+                        list(full.depth.profile = data$depth, sfs = fs, 
+                             phase="bottom", type="dur"))
+dives$d.dur <- mapply(FUN = phase.dur, i1 = dives$sind, 
+                      i2 = dives$eind, MoreArgs = 
+                        list(full.depth.profile = data$depth, sfs = fs, 
+                             phase="descent", type="dur"))
+dives$a.dur <- mapply(FUN = phase.dur, i1 = dives$sind, 
+                      i2 = dives$eind, MoreArgs = 
+                        list(full.depth.profile = data$depth, sfs = fs,
+                             phase="ascent", type="dur"))
+dives$s.dur <- c(tail(dives$start.cue,-1) - head(dives$end.cue,-1), NA)/60
+data$phase[unlist(mapply(FUN = phase.dur, i1 = dives$sind, 
+                         i2 = dives$eind, MoreArgs = 
+                           list(full.depth.profile = data$depth, sfs = fs, 
+                                phase="descent", type="ix")))] <- "descent"
+data$phase[unlist(mapply(FUN = phase.dur, i1 = dives$sind, 
+                         i2 = dives$eind, MoreArgs = 
+                           list(full.depth.profile = data$depth, sfs = fs, 
+                                phase="bottom", type="ix")))] <- "bottom"
+data$phase[unlist(mapply(FUN = phase.dur, i1 = dives$sind, 
+                         i2 = dives$eind, MoreArgs = 
+                           list(full.depth.profile = data$depth, sfs = fs, 
+                                phase="ascent", type="ix")))] <- "ascent"
+ 
+
+#plot the dive profile again...now with dive phases on it.  Also plot all the 
+#other tag data:  this is the "real" data to which we'll compare the sim data 
+#later on.
+
+##dive profile only version:
+par(mfrow=c(1,1))
+setkey(data,t)
+plot(data[,t/60] , data[,depth], ylim=c(1500,5), type="l",
+     xlab="Time (h)", ylab="Depth (m)", cex.axis=1.5, cex.lab=1.5,
+     col="black")
+setkey(data,phase)
+for (ph in 1:4){#loop over dive phases
+#   dat <- data[data$phase==levels(data$phase)[ph],]
+#   points(dat$t/60 , dat$depth, col=cbPalette[ph+1], pch=20, cex=0.5)
+  points(data[levels(data[,phase])[ph],][,t/60] , 
+         data[levels(data[,phase])[ph],][,depth], 
+         col=cbPalette[ph+1], pch=20, cex=0.5)
+}
+setkey(data,t)
+
+legend("bottomright", legend=c("Dive profile",
+                               "Bottom", "Descent", "Ascent", "Surface"),
+       col=c("black", cbPalette[2:5]), 
+       pch=c(NA,19,17,NA,NA,NA,NA), lwd=c(3,NA,NA,3,3,3,3), bty="n")
+@
+
+<<tagdata_phases, size="scriptsize", dev="png", fig.env="figure", fig.pos="htb", fig.width=5.5, fig.height=7, echo=F,eval=T, fig.cap="Tag data with dive phases">>=
+#plot eeeeverything ELSE
+data[,ID:=as.factor(ID)]
+for (w in 1:nlevels(data$ID)){
+  setkey(data,ID)
+  idata <- data[levels(data$ID)[w],]
+  setkey(idata,t)
+par(mfrow=c(8,1), cex.lab=1.2, cex.axis=1.2, mar=c(1,5,0,2), oma=c(3,0,0,0))
+hr <- idata$t/60
+
+#depth
+source("cline.R")
+pcols <- cbPalette[2:6]
+plot(hr,idata$depth, type="l", col="black", 
+     ylab="Depth",xlab="", xaxt="n", yaxt="n",
+     ylim=c(1800,-50))
+cline(hr,idata$depth,idata$phase,pcols)
+axis(side=1,labels=FALSE,tick=TRUE)
+axis(side=2,labels=TRUE,tick=TRUE)
+
+#Ax, Ay, Az (NOT coloured by phase)
+plot(hr, idata$Ax, type="l", col="black",
+     ylim=c(-1.1, 1.1),
+     ylab="Acc" ,xlab="", xaxt="n", yaxt="n")
+lines(hr, idata$Ay, type="l", col="red")
+lines(hr, idata$Az, type="l", col="blue")
+axis(side=1,labels=FALSE,tick=TRUE)
+axis(side=2,labels=TRUE,tick=TRUE)
+
+#pitch
+plot(hr,idata$pitch, type="l", col="black", 
+     ylab="Pitch",xlab="", xaxt="n", yaxt="n",
+     ylim=c(-pi,pi))
+cline(hr,idata$pitch,idata$phase,pcols)
+axis(side=1,labels=FALSE,tick=TRUE)
+axis(side=2,labels=TRUE,tick=TRUE)
+
+        
+#roll
+plot(hr,idata$roll, type="l", col="black", 
+     ylab="Roll",xlab="", xaxt="n", yaxt="n",
+     ylim=c(-pi,pi))
+cline(hr,idata$roll,idata$phase,pcols)
+axis(side=1,labels=FALSE,tick=TRUE)
+axis(side=2,labels=TRUE,tick=TRUE)
+
+#heading
+plot(hr,idata$heading, type="l", col="black", 
+     ylab="Heading",xlab="", xaxt="n", yaxt="n",
+     ylim=c(-pi,pi))
+cline(hr,idata$heading,idata$phase,pcols)
+axis(side=1,labels=FALSE,tick=TRUE)
+axis(side=2,labels=TRUE,tick=TRUE)
+
+
+#msa
+plot(hr,idata$nmsa, type="l", col="black", 
+     ylab="nMSA",xlab="", xaxt="n", yaxt="n",
+     ylim=c(0, max(idata$nmsa)))
+cline(hr,idata$nmsa,idata$phase,pcols)
+axis(side=1,labels=FALSE,tick=TRUE)
+axis(side=2,labels=TRUE,tick=TRUE)
+
+
+#odba
+plot(hr,idata$nodba, type="l", col="black", 
+     ylab="nODBA",xlab="", xaxt="n", yaxt="n",
+     ylim=c(0, max(idata$nodba)))
+cline(hr,idata$nodba,idata$phase,pcols)
+axis(side=1,labels=FALSE,tick=TRUE)
+axis(side=2,labels=TRUE,tick=TRUE)
+
+
+#vertical velocity
+plot(hr,idata$verticalvelocity, type="l", col="black", 
+     ylab="Vv",xlab="", xaxt="n", yaxt="n",
+     ylim=c(-pi,pi))
+cline(hr,idata$verticalvelocity,idata$phase,pcols)
+
+axis(side=1,labels=TRUE,tick=TRUE)
+axis(side=2,labels=TRUE,tick=TRUE)
+mtext("Time (h)", side=1, line=2)
+}
+setkey(data,t)
+@
+
+<<phase_durations, size="scriptsize", include=T, echo=F,eval=T>>=
+#find dive-type-specific MVN distribution of phase durations
+
+#if sample size is really small ignore temporal autocorrelation
+#(it's not so bad...remember this is within dive type...)
+require(mclust)
+require(mvtnorm)
+dp <- na.omit(dives[,c("b.dur", "d.dur", "a.dur", "s.dur", "clus.num")])
+#use Box-Cox transforms to make the dive-phase data as Normal as possible 
+#(phase-by-phase - not trying to do MVN because can't figure out how car 
+#library is doing that so can't invert)
+
+#get Box-Cox transformation params for all 4 dive phases
+require(car)
+tp <- by(data=dp[,names(dp)!="clus.num"], INDICES=dp$clus.num,
+         FUN=function(x) powerTransform(x)$lambda )
+tp.mat <- tp[dp$clus.num]
+tp.mat <- matrix(unlist(tp.mat), ncol=4, byrow=T)
+
+my.boxcox <- function(x, lmat) {
+  #x should be a matrix of dive phase durations
+  #lmat should be a matrix r of transform params
+  (x^lmat-1)/lmat
+}
+my.boxcox.inv <- function(x, lmat){
+  (x*lmat + 1)^(1/lmat)
+}
+
+#do box-cox transform
+dp.trans <- my.boxcox(dp[,names(dp)!="clus.num"],tp.mat)
+
+#fit MVN dist to the transformed data
+mvn.est <- by(data=dp.trans, INDICES=dp$clus.num, FUN=mvn, modelName="XXX")
+
+# #if there are enough dives of each type, could try this instead. (including 
+#autocorrelation)
+require(mAr)
+mAr.fitted <- by(data=dp.trans[,c("b.dur", "d.dur","a.dur", "s.dur")],
+                 INDICES=dp$clus.num, FUN=mAr.est, p=1) 
+
+@
+
+Some notes about this section.  We have modelled cosine and sine of heading angles because of the 
+circular nature of the data, and the fact that the data actually 'crosses the 
+boundary' between 0 and 2$\pi$ (or +/- $\pi$) quite often. The pitch and roll 
+data do not seem to present a similar problem, since the values are more 
+tightly clustered (at least within a dive phase), but for technical 
+correctness and for safety's sake they are treated in the same way. Note that 
+I also tried to model heading as diff(heading) in order to allow carry-over 
+from one dive phase to the next in the general heading, but somehow this 
+actually made it look worse (simulated heading was a lot more variable than 
+the real heading). ??? The vertical velocity has strong trends over the 
+course of the dives, which may be difficult to replicate in this framework as 
+it stands. One possible solution might be to specify an initial value for the 
+start of the descent phase (perhaps selected from a distribution).  Pitch is 
+similar; we might need to specify an initial pitch for each descent phase.
+
+\section{Phase-specific model fitting} For each phase, (and separately for 
+each dive type), fit a multivariate normal model including ARn temporal 
+autocorrelation for all of the variables to be simulated.  (The mAr package 
+in R seems promising).
+
+<<within_phase, size="scriptsize", include=FALSE,echo=F,eval=T>>=
+#results will be a list with one entry for each dive type.
+#the entry for each cluster will be another list, with one entry for each 
+#dive phase (named)
+#the entry for each dive phase will be ANOTHER list with the mAr fitted model 
+#object.
+#NOTE there is  a flaw here in that the fitting concatenates all available 
+#data for a given dive type & phase.  SO: don't choose the AR order to be too 
+#high, or you'll be assuming autocorrelation of phase-specific parameters 
+#BETWEEN DIVES.  Hey maybe even let's just use AR(1) and see how life goes.
+
+#assign cluster numbers in "data" using dives$clus.num
+dive.starts <- dives$sind
+dive.ends <- c(tail(dives$sind,-1)-1 , nrow(data) )
+for (d in 1:nrow(dives)){
+  ix <- c(dive.starts[d]:dive.ends[d])
+  data[ix , clus.num:=dives$clus.num[d]]
+}
+
+#add vector of time-in-phase
+pe <- c(which(diff(unclass(data$phase))!=0) , nrow(data))#ends 
+ps <- c(1, head(pe,-1)+1) #starts
+data[,tip:=unlist(mapply(FUN=function(ps,pe) c(1:(pe-ps+1)) , ps, pe))]
+
+#and dive number, phase number and change-in-depth-in-phase
+data[,dnum:=
+           unlist(mapply(FUN=function(dive.start, dive.end, dive.num)
+    rep(dive.num, times=(dive.end-dive.start+1)), dive.starts, dive.ends, 
+    c(1:nrow(dives))))]
+data[,pnum:=unlist(mapply(FUN=function(phase.start, phase.end, n.phases)
+    rep(n.phases, times=(phase.end-phase.start+1)), ps, pe, c(1:length(ps))))]
+data[,zip:=depth-depth[1], by=pnum]
+
+inPhase <- vector("list", k.best)
+#keep2 is list of variables to model in-phase (cos/sin of angular data; 
+#everything else except total time since tagon)
+keep2 <- c( "Ax", "Ay", "Az",
+           "cpitch", "spitch", "croll",
+           "sroll", "shead", "chead",
+           "nmsa", "nodba", "verticalvelocity", "tip", "zip")
+#to get the list without quotes to paste below use:
+#cat(keep2, sep=",")
+require(mAr)
+for (dt in 1:k.best){ #loop over dive types
+  inPhase[[dt]] <- vector("list", 4)
+  names(inPhase[[dt]]) <- levels(data$phase)
+  for (ph in 1:4) {#loop over dive phases
+    #get the data for dive type dt, phase ph
+    dat <- data[data$clus.num==dt & data$phase==levels(data$phase)[ph], 
+             list(Ax,Ay,Az,cpitch,spitch,croll,sroll,shead,chead,nmsa,nodba,verticalvelocity,tip,zip)   ]
+    inPhase[[dt]][[ph]] <- mAr.est(x=dat, p=1)
+  }
+}
+
+
+@
+
+\section{Simulation}  Using the fitted model above, we can try to simulate 
+some DTAG data.
+
+First, we simulate a series of dive types.
+<<sim_dt, size="scriptsize", include=T,echo=T,eval=T, tidy=T, tidy.opts=list(keep.blank.line=FALSE, width.cutoff=60)>>=
+#first simulate a series of dives.  
+n.sim <- 50 #number of dives to simulate
+#use the MC model to assign dive types
+sim.dives <- data.frame(dnum=c(1:n.sim))
+#randomly select the first dive in the record
+d1 <- sample(dives$clus.num , 1)
+
+MC.sim <- function(n,G,d1) {
+  sim <- numeric(n)
+  m <- ncol(G)
+  if (missing(d1)) {
+    sim[1] <- sample(1:m,1) # random start
+  } else { sim[1] <- d1 }
+  for (i in 2:n) {
+  newstate <- sample(1:m,1,prob=G[sim[i-1],])
+  sim[i] <- newstate
+  }
+  return(sim)
+}
+
+sim.dives$clus.num <- MC.sim(n.sim, G, d1)
+@
+
+Next, we determine the duration of each phase (descent, bottom time, ascent, 
+and surface time) of each simulated dive.
+
+<<sim_pdur, size="scriptsize", include=T,echo=T,eval=T, tidy=F>>=
+#next simulate duration of each phase of each dive.  
+sim.dives[,3:6] <- NA
+names(sim.dives)[3:6] <- 
+  c("b.dur", "d.dur", "a.dur", "s.dur")
+lmat.sim <- tp[sim.dives$clus.num]
+lmat.sim <- matrix(unlist(lmat.sim), ncol=4, byrow=T)
+
+for (dt in 1:k.best){
+  while (sum(is.na(sim.dives[sim.dives$clus.num==dt , 
+                     c("b.dur", "d.dur",
+                       "a.dur", "s.dur")])) > 0){ 
+  if (sum(sim.dives$clus.num==dt) > 0){
+  sim.dives[sim.dives$clus.num==dt , 
+            c("b.dur", "d.dur",
+              "a.dur", "s.dur")] <-
+    my.boxcox.inv(rmvnorm(n=sum(sim.dives$clus.num==dt),
+            mean=mvn.est[[dt]]$parameters$mean , 
+            sigma=mvn.est[[dt]]$parameters$variance$Sigma,
+            method="svd") , lmat.sim[sim.dives$clus.num==dt,])
+  }
+  }
+  #redo if there are any NA durations (AKA "your durations aren't really 
+  #MVN...happens esp with short dive phases)
+}
+
+sim.dives$dur <- apply(sim.dives[,3:6], 1, sum)
+
+@
+
+Before we can simulate the data within each dive phase, we will set up a data 
+table to hold all the data, with appropriate time stamps.
+
+<<sim_data_setup, size="scriptsize", include=T,echo=T,eval=T, tidy=F>>=
+#set up the time-series data frame
+sim.data <- data.table(t=seq(from=(1/fs),by=(1/fs),
+                             to=60*sum(sim.dives$dur)))
+setkey(sim.data,t)
+sim.dives$d.end <- 
+  round((sim.dives$d.dur +
+           cumsum(c(0,head(sim.dives$dur,-1)))) * fs*60)
+sim.dives$b.end <- 
+  sim.dives$d.end + round(sim.dives$b.dur * fs*60)
+sim.dives$a.end <- 
+  sim.dives$b.end + round(sim.dives$a.dur * fs*60)
+sim.dives$s.end <- 
+  sim.dives$a.end + round(sim.dives$s.dur * fs*60)
+@
+We will also add dive-phase labels.
+<<sim_data_setup2, size="scriptsize", include=T,echo=T,eval=T, tidy=F>>=
+#add phase labels to sim.data
+#BEGIN section where I am super ashamed of the code.
+get.ind <- function(st, et){
+  ix <- c(st:et)
+}
+sim.data$phase <- 
+  factor("surface",
+         levels=c("bottom", "descent",
+                  "ascent", "surface"))
+di <- unlist(mapply(FUN=get.ind, 
+                    st=c(1,head(sim.dives$s.end,-1)) ,
+                    et=sim.dives$d.end))
+bi <- unlist(mapply(FUN=get.ind, 
+                    st=sim.dives$d.end+1 ,
+                    et=sim.dives$b.end))
+ai <- unlist(mapply(FUN=get.ind, 
+                    st=sim.dives$b.end+1 ,
+                    et=sim.dives$a.end))
+si <- unlist(mapply(FUN=get.ind, 
+                    st=sim.dives$a.end+1 ,
+                    et=sim.dives$s.end))
+di[di > nrow(sim.data)] <- nrow(sim.data)
+bi[bi > nrow(sim.data)] <- nrow(sim.data)
+ai[ai > nrow(sim.data)] <- nrow(sim.data)
+si[si > nrow(sim.data)] <- nrow(sim.data)
+sim.data$phase[di] <- "descent"
+sim.data$phase[bi] <- "bottom"
+sim.data$phase[ai] <- "ascent"
+sim.data$phase[si] <- "surface"
+#END shame. at least the extreme shame.
+
+s <- sim.data[phase=="surface",,which=T]
+sim.starts <- c(1,s[diff(sim.data[s,t])> 1]+1)
+sim.ends <- c(tail(sim.starts,-1), nrow(sim.data)+1) - 1
+#add identifier of dive-type (cluster number)
+sim.data[,clus.num:=
+           unlist(mapply(FUN=function(dive.start, dive.end, clus.num)
+             rep(clus.num, times=(dive.end-dive.start+1)), sim.starts, sim.ends, 
+    sim.dives$clus.num))]
+#add dive number (in sequence - first, second, 3rd dive etc) 
+sim.data[,dive.num:=
+           unlist(mapply(FUN=function(dive.start, dive.end, dive.num)
+    rep(dive.num, times=(dive.end-dive.start+1)), sim.starts, sim.ends, 
+    c(1:nrow(sim.dives))))]
+
+
+@
+
+Finally, we simulate tag data within each dive phase.  
+<<sim_data, size="scriptsize", include=T,echo=T,eval=T, tidy=T,tidy.opts=list(keep.blank.line=FALSE, width.cutoff=60)>>=
+#fill in the simulated DTAG data within dive phases.
+#find the places where dive phase changes
+#this gives indices of the last entry within phases:
+setkey(sim.data,t)
+pe <- c(which(diff(unclass(sim.data$phase)) != 0), nrow(sim.data))
+ps <- c(1, head(pe, -1) + 1) #starts
+#not needed for data.table:
+#sim.data[, keep2] <- vector("numeric", nrow(sim.data))
+#keep2 (phases to simulate):
+# list(depth, Ax, Ay, Az,cpitch, spitch, croll,sroll, shead, chead,nmsa, nodba, verticalvelocity, tip)
+for (p in 1:length(ps)) {
+pix <- seq(from = ps[p], to = pe[p])
+np <- length(pix)
+dt <- sim.data[pix[1],clus.num]
+# ph <- unclass(sim.data$phase[pix[1]])
+mod <- inPhase[[dt]][[sim.data[pix[1],phase]]]
+sim.data[pix, (keep2):=mAr.sim(w = mod$wHat, A = mod$AHat,
+C = mod$CHat, N = np)]
+}
+
+# convert sin/cos heading to heading angle:
+sincos2angle <- function(sin.data, cos.data) {
+i <- complex(real = 0, imaginary = 1)
+ang <- Arg(cos.data + i * sin.data)
+return(ang)
+# three cheers for Euler!
+}
+# if heading is modelled as sin(heading) & cos(heading)
+sim.data[,heading:=sincos2angle(sim.data$shead,sim.data$chead)] 
+#if heading is modelled as diff(heading)
+## head0 <- runif(1, min = -pi, max = pi) + cumsum(sim.data$dhead)
+## sim.data[,heading:=sincos2angle(sin.data = sin(head0), cos.data = cos(head0))]
+sim.data[,pitch:=sincos2angle(sim.data$spitch, sim.data$cpitch)]
+sim.data[,roll:=sincos2angle(sim.data$sroll, sim.data$croll)]
+# also generate a depth profile based on: 1. z=0 at start of
+# each descent phase 2. then use vertical velocity Note: this
+# will never work quite right because the whale won't end up
+# back at the surface at the end of the dive.
+setkey(sim.data,t)
+ds <- intersect(ps, sim.data[phase == "descent",,which=T])
+sim.data[,vd:=verticalvelocity * (1/fs)]
+# get 'dead reckoned' depth track
+vd2z <- function(dive.start, dive.end, vd) {
+cumsum(vd[c(dive.start:dive.end)]) - vd[dive.start]
+}
+sim.data[,z0:=unlist(mapply(FUN = vd2z, dive.start = sim.starts,
+dive.end = sim.ends, MoreArgs = list(vd = sim.data$vd)))]
+# adjust ascent vv so the whale ends at the surface.
+as <- intersect(ps, sim.data[phase == "ascent",,which=T])
+ss <- intersect(ps, sim.data[phase == "surface",,which=T])
+adj.asc.vd <- function(as, ae, z0, vd) {
+# adjust ascent depth profile and vv so whale ends up at the
+# surface @ end of dive
+zb <- z0[as - 1] #depth at end of bottom phase
+za <- -sum(vd[c(as:ae)]) #net distance covered during the ascent
+vd.new <- zb/za * vd[c(as:ae)]
+return(vd.new)
+}
+sim.data[,vd.adj:=vd]
+sim.data[phase == "ascent" ,vd.adj:=unlist(mapply(FUN = adj.asc.vd,
+as = as, ae = ss - 1, MoreArgs = list(vd = sim.data$vd, z0 = sim.data$z0)))]
+sim.data[,z:=unlist(mapply(FUN = vd2z, dive.start = sim.starts,
+dive.end = sim.ends, MoreArgs = list(vd = sim.data$vd.adj)))]
+@
+We can plot the simulated data as a first check of whether the simulation 
+output "look like" real DTAG data.
+
+Notes on things that still need consideration:
+The real data (especially ODBA and MSA) seems to have more spikes in it than 
+the simulated data - should we try to account for that somehow?
+Also, some data like the heading really ought to carry over information for 
+the previous state into the new state (take the first value in the new state 
+to match the last in the old state, for example.) Vv might need this as well, 
+and roll too perhaps? but not pitch, not MSA or ODBA or acc. This is actually 
+a major problem because the mAr.sim function I am using (from mAr package) 
+does not allow specification of an initial value, nor does any similar 
+function I can find.  How big is the problem?  Well, it's not horribly 
+obvious on a plot of a long time-series, but it's really pretty terrible 
+(there is far more turning in conjunction with phase changes in the simulated 
+data than in the real data; Figure \ref{fig:phasehead}-\ref{fig:phasevd}).  I 
+am not sure how to fix this problem, and am tempted to proceed with the 
+simulator as-is and see what happens.  However, in that case, it will be 
+important to stay on the lookout for spikes in Mahalanobis distance that 
+occur at the time of phase transitions - they are likely to be artifacts 
+introduced into the simulated data by the problem discussed above.
+
+<<phasehead, include=T,echo=F,eval=T, dev="png", fig.env="figure", fig.pos="htb", fig.width=5.5, fig.height=3>>=
+par(mfrow=c(1,2), mar=c(5,4,2,2))
+dhead.sim <- sim.data$heading[ps] - 
+c(sim.data$heading[ps[1]],sim.data$heading[ps-1])
+dhead.sim[dhead.sim > pi] <- -(dhead.sim[dhead.sim > pi] - pi)
+dhead.sim[dhead.sim < -pi] <- -(dhead.sim[dhead.sim < -pi] + pi)
+boxplot(dhead.sim, xlab="Diff(heading) @ phase changes [simulation]", 
+ylim=c(-pi,pi))
+pe.data <- c(which(diff(unclass(data$phase))!=0) , nrow(data))#ends 
+ps.data <- c(1, head(pe.data,-1)+1) #starts
+dhead.data <- data$heading[ps.data] - 
+c(data$heading[ps.data[1]],data$heading[ps.data-1])
+dhead.data[dhead.data > pi] <- -(dhead.data[dhead.data > pi] - pi)
+dhead.data[dhead.data < -pi] <- -(dhead.data[dhead.data < -pi] + pi)
+boxplot(dhead.data, xlab="Diff(heading) @ phase changes [data]", 
+ylim=c(-pi,pi))
+
+@
+
+<<phaseroll, include=T,echo=F,eval=T, dev="png", fig.env="figure", fig.pos="htb", fig.width=5.5, fig.height=3>>=
+par(mfrow=c(1,2), mar=c(5,4,2,2))
+droll.sim <- sim.data$roll[ps] - c(sim.data$roll[ps[1]],sim.data$roll[ps-1])
+droll.sim[droll.sim > pi] <- droll.sim[droll.sim > pi] - pi
+droll.sim[droll.sim < -pi] <- droll.sim[droll.sim < -pi] + pi
+boxplot(droll.sim, xlab="Diff(roll) @ phase changes [simulation]", 
+ylim=c(-pi,pi))
+droll.data <- data$roll[ps.data] - 
+c(data$roll[ps.data[1]],data$roll[ps.data-1])
+droll.data[droll.data > pi] <- droll.data[droll.data > pi] - pi
+droll.data[droll.data < -pi] <- droll.data[droll.data < -pi] + pi
+boxplot(droll.data, xlab="Diff(roll) @ phase changes [data]", 
+ylim=c(-pi,pi))
+
+@
+
+<<phasevd, include=T,echo=F,eval=T, dev="png", fig.env="figure", fig.pos="htb", fig.width=5.5, fig.height=3>>=
+par(mfrow=c(1,2), mar=c(5,4,2,2))
+dvd.sim <- sim.data$vd.adj[ps] - 
+c(sim.data$vd.adj[ps[1]],sim.data$vd.adj[ps-1])
+boxplot(dvd.sim, xlab="Diff(vd) @ phase changes [simulation]", ylim=c(-0.5, 
+0.5))
+data$vd <- data$verticalvelocity/fs
+dvd.data <- data$vd[ps.data] - c(data$vd[ps.data[1]],data$vd[ps.data-1])
+boxplot(dvd.data, xlab="Diff(vd) @ phase changes [data]", ylim=c(-0.5, 
+0.5))
+
+@
+
+Then...time to make some plots to show to experts!
+After that, next step is to read in full tag datasets per-individual and then 
+do the fitting to average over individuals (without assuming that inds are 
+concatenated into one big long time series).
+Then -- try other species?  And make a game plan for which Mdist simulations 
+we are actually going to run (what are the responses to simulate - how many 
+response intensities -etc.  Maybe avoid, energetic, social, foraging 
+responses, 3 levels of each?)
+<<plot_sim_data, include=T,echo=F,eval=T, dev="png", fig.env="figure", fig.pos="htb", fig.width=5.5, fig.height=7, fig.cap="Simulated data">>=
+#plot eeeeverything you faked (well, not everything)
+par(mfrow=c(8,1), cex.lab=1.2, cex.axis=1.2, mar=c(1,5,0,2), oma=c(3,0,0,0))
+hr <- sim.data$t/60
+
+#dive depth (with no flying allowed!!)
+plot(hr,sim.data$z, type="l", col="black", 
+     ylab="Depth",xlab="", xaxt="n", yaxt="n",
+     ylim=c(1800,50))
+cline(hr,sim.data$z,sim.data$phase,pcols)
+axis(side=1,labels=FALSE,tick=TRUE)
+axis(side=2,labels=TRUE,tick=TRUE)
+
+#Ax, Ay, Az (NOT coloured by phase)
+plot(hr, sim.data$Ax, type="l", col="black",
+     ylim=c(-1.1, 1.1),
+     ylab="Acc" ,xlab="", xaxt="n", yaxt="n")
+lines(hr, sim.data$Ay, type="l", col="red")
+lines(hr, sim.data$Az, type="l", col="blue")
+axis(side=1,labels=FALSE,tick=TRUE)
+axis(side=2,labels=TRUE,tick=TRUE)
+
+#pitch
+plot(hr,sim.data$pitch, type="l", col="black", 
+     ylab="Pitch",xlab="", xaxt="n", yaxt="n",
+     ylim=c(-pi,pi))
+cline(hr,sim.data$pitch,sim.data$phase,pcols)
+axis(side=1,labels=FALSE,tick=TRUE)
+axis(side=2,labels=TRUE,tick=TRUE)
+
+        
+#roll
+plot(hr,sim.data$roll, type="l", col="black", 
+     ylab="Roll",xlab="", xaxt="n", yaxt="n",
+     ylim=c(-pi,pi))
+cline(hr,sim.data$roll,sim.data$phase,pcols)
+axis(side=1,labels=FALSE,tick=TRUE)
+axis(side=2,labels=TRUE,tick=TRUE)
+
+#heading
+plot(hr,sim.data$heading, type="l", col="black", 
+     ylab="Heading",xlab="", xaxt="n", yaxt="n",
+     ylim=c(-pi,pi))
+cline(hr,sim.data$heading,sim.data$phase,pcols)
+axis(side=1,labels=FALSE,tick=TRUE)
+axis(side=2,labels=TRUE,tick=TRUE)
+
+
+#msa
+plot(hr,sim.data$nmsa, type="l", col="black", 
+     ylab="MSA",xlab="", xaxt="n", yaxt="n",
+     ylim=c(0, max(data$nmsa)))
+cline(hr,sim.data$nmsa,sim.data$phase,pcols)
+axis(side=1,labels=FALSE,tick=TRUE)
+axis(side=2,labels=TRUE,tick=TRUE)
+
+
+#odba
+plot(hr,sim.data$nodba, type="l", col="black", 
+     ylab="ODBA",xlab="", xaxt="n", yaxt="n",
+     ylim=c(0, max(data$nodba)))
+cline(hr,sim.data$nodba,sim.data$phase,pcols)
+axis(side=1,labels=FALSE,tick=TRUE)
+axis(side=2,labels=TRUE,tick=TRUE)
+
+
+#vertical displacement
+plot(hr,sim.data$vd.adj, type="l", col="black", 
+     ylab="Vd",xlab="", xaxt="n", yaxt="n")
+cline(hr,sim.data$vd.adj,sim.data$phase,pcols)
+
+axis(side=1,labels=TRUE,tick=TRUE)
+axis(side=2,labels=TRUE,tick=TRUE)
+mtext("Time (h)", side=1, line=2)
+
+#prep for experts to look at, see which is which?
+@
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%BIBLIOGRAPY 
+
+\bibliographystyle{plainnat} 
+\addcontentsline{toc}{section}{References} \bibliography{library} 
+
+\end{document}
