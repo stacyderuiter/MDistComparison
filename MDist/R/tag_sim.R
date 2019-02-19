@@ -42,9 +42,9 @@ tag_sim <- function(n, G, G_exp=G, first=NULL, phase_params, phase_params_exp = 
   sim_dives <- data.frame(dnum=seq(from=1, to=n)) %>%
     # add column indicating whether each dive will be "baseline" or "response" to experimental exposure.
     dplyr::mutate(resp = ifelse(dnum >= resp_start & dnum <= resp_start + resp_dur,
-                         'response', 'baseline')) %>%
-    #simulate dive types based on G and G_exp
-    dplyr::mutate(dive_type = mc_sim(sim_dives, n, G, G_exp, first))
+                         'response', 'baseline')) 
+  #simulate dive types based on G and G_exp
+  sim_dives <- dplyr::mutate(sim_dives, dive_type = mc_sim(sim_dives, n, G, G_exp, first))
 
   # SIMULATE DURATIONS OF PHASES WITHIN EACH DIVE
  
@@ -67,9 +67,9 @@ tag_sim <- function(n, G, G_exp=G, first=NULL, phase_params, phase_params_exp = 
       rlang::set_names(row.names(phase_params[[1]]$parameters$mean))
     # undo the box-cox transformation, if necessary
     if (!is.null(transform_params)){
-      return(box_cox(durs, lambda=tp, inverse=TRUE))
-    }else{
       return(durs)
+    }else{
+      return(box_cox(durs, lambda=tp, inverse=TRUE))
     }
   }
   
@@ -143,15 +143,15 @@ tag_sim <- function(n, G, G_exp=G, first=NULL, phase_params, phase_params_exp = 
   sim.starts <- c(1,s[diff(sim_data[s,t])> 1]+1)
   sim.ends <- c(tail(sim.starts,-1), nrow(sim_data)+1) - 1
   #add identifier of dive-type (cluster number)
-  sim_data[,dive_type:=
+  sim_data$dive_type=
              unlist(mapply(FUN=function(dive.start, dive.end, clus.id)
-               rep(clus.id, times=(dive.end-dive.start+1)), sim.starts, sim.ends, 
-               sim_dives$dive_type))]
+               rep(clus.id, times=(dive.end-dive.start+1)), 
+               sim.starts, sim.ends, sim_dives$dive_type))
   #add dive number (in sequence - first, second, 3rd dive etc) 
-  sim_data[,dive_num:=
+  sim_data$dive_num=
              unlist(mapply(FUN=function(dive.start, dive.end, dive.id)
-               rep(dive.id, times=(dive.end-dive.start+1)), sim.starts, sim.ends, 
-               c(1:nrow(sim_dives))))]
+               rep(dive.id, times=(dive.end-dive.start+1)),
+               sim.starts, sim.ends, c(1:nrow(sim_dives))))
   #fill in the simulated DTAG data within dive phases.
   #find the places where dive phase changes
   #this gives indices of the last entry within phases:
@@ -161,7 +161,9 @@ tag_sim <- function(n, G, G_exp=G, first=NULL, phase_params, phase_params_exp = 
   #start indices of phases
   ps <- c(1, head(pe, -1) + 1) 
   #indicator of whether each time point is "response" or not
-  sim_data[,resp:=sim_dives[sim_data$dive_num,"resp"]]
+  sim_data$resp=sim_dives[sim_data$dive_num,"resp"]
+  # add new columns for new Dtag within phase sims
+  sim_data[,as.character(keep2)] <- as.numeric(0)
   
   # loop over all dive phases in simulated dataset
   for (p in 1:length(ps)) {
@@ -175,10 +177,10 @@ tag_sim <- function(n, G, G_exp=G, first=NULL, phase_params, phase_params_exp = 
     
     if (sim_data[pix[1], resp]=="baseline"){
       # simulation params for this phase, this dive type, baseline
-      mod <- phase_params[[dt]][[sim_data[pix[1],phase]]]
+      mod <- fine_params[[dt]][[sim_data[pix[1],phase]]]
     }else{
       # simulation params for this phase, this dive type, response
-      mod <- phase_params_exp[[dt]][[sim_data[pix[1],phase]]]
+      mod <- fine_params_exp[[dt]][[sim_data[pix[1],phase]]]
     }
     
     # try to simulate data
@@ -193,9 +195,9 @@ tag_sim <- function(n, G, G_exp=G, first=NULL, phase_params, phase_params_exp = 
                 #    silent=TRUE)
    }
     # put the data into the sim_data data table
-    sim_data[pix, (keep2):=fillin]
+    sim_data[pix, 6:18:= fillin]
     # remove the phase data so it doesn't gum up the next iteration
-   rm(fillin)
+    rm(fillin)
   }
   
   #verify odba, msa are +ve.
@@ -245,8 +247,8 @@ tag_sim <- function(n, G, G_exp=G, first=NULL, phase_params, phase_params_exp = 
   sim_data[,vd.adj:=vd]
   sim_data[phase == "ascent" ,vd.adj:=unlist(mapply(FUN = adj.asc.vd,
                                                     as = as, ae = ss - 1, MoreArgs = list(vd = sim_data$vd, z0 = sim_data$z0)))]
-  sim_data[,z:=unlist(mapply(FUN = vd2z, dive.start = sim.starts,
-                             dive.end = sim.ends, MoreArgs = list(vd = sim_data$vd.adj)))]
+  sim_data$z = unlist(mapply(FUN = vd2z, dive.start = sim.starts,
+                             dive.end = sim.ends, MoreArgs = list(vd = sim_data$vd.adj)))
   # don't let the whales fly even after all this adjustment they try to.
   sim_data[,z:=ifelse(z < -5, 0, z)]
   return(sim_data)
